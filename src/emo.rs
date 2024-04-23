@@ -10,7 +10,7 @@
 #[allow(dead_code)]
 pub mod emo {
     use crate::particle::particle::Particle;
-    use colored::*;
+    //use colored::*;
 
     pub struct Emo {
         particles: Vec<Particle>,
@@ -19,6 +19,7 @@ pub mod emo {
         aptitude: fn(p: &Particle) -> f64,
         max_iterations: i32,
         problem: String,
+        constraints : fn(Vec<f64>) -> Vec<f64>
     }
 
     impl Emo {
@@ -36,9 +37,29 @@ pub mod emo {
                 best_particle: initialize_best(dimension, &problem),
                 worst_particle: initialize_worst(dimension, &problem),
                 problem,
+                constraints : filter_constraints
             }
         }
 
+        pub fn with_constraints(
+            particles: Vec<Particle>,
+            aptitude: fn(p: &Particle) -> f64,
+            max_iterations: i32,
+            problem: String,
+            constraints : fn(Vec<f64>) -> Vec<f64>
+        ) -> Emo {
+            let dimension = particles[0].position.len();
+            Emo {
+                particles,
+                aptitude,
+                max_iterations,
+                best_particle: initialize_best(dimension, &problem),
+                worst_particle: initialize_worst(dimension, &problem),
+                problem,
+                constraints
+            }
+        }
+        
         pub fn show_particles(&self) {
             for p in &self.particles {
                 println!("{:?}", p.print());
@@ -50,22 +71,42 @@ pub mod emo {
         }
 
         pub fn update_fitness(&mut self) {
+            self.best_particle.position = (self.constraints)(self.best_particle.position.clone());
             self.best_particle.charge = (self.aptitude)(&self.best_particle);
+
+            self.worst_particle.position = (self.constraints)(self.worst_particle.position.clone());
             self.worst_particle.charge = (self.aptitude)(&self.worst_particle);
+
             for p in &mut self.particles {
+                p.position = (self.constraints)(p.position.clone());
                 p.charge = (self.aptitude)(p);
+
             }
         }
 
         pub fn update_best_worst(&mut self) {
-            for p in &self.particles {
-                if p.charge < self.best_particle.charge {
-                    println!("Updating best with charge: {}", p.charge);
-                    self.best_particle = p.clone();
+            if self.problem == "min"{
+                for p in &self.particles {
+                    if p.charge < self.best_particle.charge {
+                        //println!("Updating best with charge: {}", p.charge);
+                        self.best_particle = p.clone();
+                    }
+                    if p.charge > self.worst_particle.charge {
+                        //println!("Updating worst with charge: {}", p.charge);
+                        self.worst_particle = p.clone();
+                    }
                 }
-                if p.charge > self.worst_particle.charge {
-                    println!("Updating worst with charge: {}", p.charge);
-                    self.worst_particle = p.clone();
+            }
+            else{
+                for p in &self.particles {
+                    if p.charge > self.best_particle.charge {
+                        //println!("Updating best with charge: {}", p.charge);
+                        self.best_particle = p.clone();
+                    }
+                    if p.charge < self.worst_particle.charge {
+                        //println!("Updating worst with charge: {}", p.charge);
+                        self.worst_particle = p.clone();
+                    }
                 }
             }
         }
@@ -74,41 +115,26 @@ pub mod emo {
             for it in 0..self.max_iterations {
                 self.update_fitness();
                 self.update_best_worst();
-                println!("------Iteration: {}------", it);
                 for p in &mut self.particles {
                     if &p.position == &self.best_particle.position {
                         continue;
                     }
-                    println!(
-                        "{}",
-                        format!("Particle before iteration: {}", it).on_yellow()
-                    );
-
-                    p.print();
                     let d = euclidean_distance(p.clone(), self.best_particle.clone()).unwrap();
-                    println!("Distance: {}", d);
+                    let mut new_position = vec![];
                     for i in 0..p.position.len() {
                         let mut f = force(p.clone(), self.best_particle.clone(), d, i).unwrap();
-                        println!("Force: {}", f);
                         f = normalize(f, d).unwrap();
-                        println!("Normalized force: {}", f);
                         let mut a =
-                            acceleration(p.clone(), self.best_particle.clone(), d, i, f).unwrap();
-                        println!("Acceleration: {}", a);
+                        acceleration(p.clone(), self.best_particle.clone(), d, i, f).unwrap();
                         a = normalize(a, d).unwrap();
-                        println!("Normalized acceleration: {}", a);
                         let mut new_component =
-                            cal_component(p.clone(), a, i, it as f64 + 1.0).unwrap();
-                        println!("New component: {}", new_component);
+                        cal_component(p.clone(), a, i, it as f64 + 1.0).unwrap();
                         new_component = normalize(new_component.clone(), d).unwrap();
-                        println!("Normalized component: {}", new_component);
-                        p.position[i] = new_component;
+                        //p.position[i] = new_component;
+                        new_position.push(new_component);
                     }
-                    println!(
-                        "{}",
-                        format!("Particle after iteration: {}", it).on_yellow()
-                    );
-                    p.print();
+                    new_position = (self.constraints)(new_position);
+                    p.update_position(new_position);
                 }
             }
             Ok(self.best_particle.clone())
@@ -175,18 +201,22 @@ pub mod emo {
             let best = Particle::new(vec![9999.0; dimension]);
             return best;
         } else {
-            let best = Particle::new(vec![-9999.0; dimension]);
+            let best = Particle::new(vec![1.0; dimension]);
             return best;
         }
     }
 
     fn initialize_worst(dimension: usize, problem: &str) -> Particle {
         if problem == "min" {
-            let worst = Particle::new(vec![-9999.0; dimension]);
+            let worst = Particle::new(vec![1.0; dimension]);
             return worst;
         } else {
             let worst = Particle::new(vec![9999.0; dimension]);
             return worst;
         }
+    }
+
+    fn filter_constraints(position: Vec<f64>) -> Vec<f64> {
+        position
     }
 }

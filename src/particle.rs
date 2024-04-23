@@ -25,5 +25,9 @@ pub mod particle {
                 format!("(P:{:?},CH:{:?})", self.position, self.charge).blue()
             );
         }
+
+        pub fn update_position(&mut self, new_position: Vec<f64>) {
+            self.position = new_position;
+        }
     }
 }
